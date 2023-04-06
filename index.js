@@ -2,11 +2,14 @@ const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
+  MessageMentions,
+  MessageReaction,
   ButtonBuilder,
   ActionRowBuilder,
   ApplicationCommandType,
   ApplicationCommandOptionType,
   ButtonStyle,
+  Colors,
 } = require("discord.js");
 const { token } = require("./config.json");
 
@@ -42,6 +45,18 @@ client.once("ready", async () => {
         name: "정보",
         type: ApplicationCommandType.ChatInput,
         description: "봇 정보를 확인합니다.",
+      },
+      {
+        name: "버그",
+        type: ApplicationCommandType.ChatInput,
+        description: "버그를 말해줘요!",
+        options: [
+          {
+            name: "문제요약",
+            type: ApplicationCommandOptionType.String,
+            description: "어떤게 안되는지 적어주세요.",
+          },
+        ],
       },
     ])
     .catch(console.error);
@@ -156,8 +171,31 @@ const joinButtons = new ActionRowBuilder()
       .setStyle(ButtonStyle.Primary)
   );
 
+// 314742079559434250
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
+
+  if (interaction.commandName === "버그") {
+    const reason =
+      interaction.options.getString("문제요약") ?? "No reason provided";
+
+    const BugInfoEmbed = new EmbedBuilder()
+      .setColor(Colors.DarkRed)
+      .setTitle("내가 어디가 아프죠?")
+      .addFields([{ name: "증상", value: reason }])
+      .addFields([
+        { name: "멋진 담당자 👩‍💻", value: `<@314742079559434250>` },
+        { name: "그냥 지나가는 행인", value: "행복맨" },
+      ])
+      .setFooter({
+        text: `👾멋진 피드백 제공자👾: ${interaction.user.username} | ${interaction.user.id}`,
+      });
+
+    return await interaction.reply({
+      embeds: [BugInfoEmbed],
+      content: `<@314742079559434250> 고쳐줘!`,
+    });
+  }
 
   if (interaction.commandName === "정보") {
     const BotInfoEmbed = new EmbedBuilder()
