@@ -227,7 +227,7 @@ client.on("interactionCreate", async (interaction) => {
     .setDescription(
       `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
         UserNumCount - 1
-      }개까지만 설정할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${UserWinCount}`
+      }명 까지만 설정할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${UserWinCount}`
     );
 
   if (interaction.customId === "add") {
@@ -405,7 +405,7 @@ client.on("interactionCreate", async (interaction) => {
           SecondEmbed.setDescription(
             `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
               UserNumCount - 1
-            }개까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
+            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
           ),
         ],
         components: [delAddButtons],
@@ -419,7 +419,7 @@ client.on("interactionCreate", async (interaction) => {
           SecondEmbed.setDescription(
             `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
               UserNumCount - 1
-            }개까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
+            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
           ),
         ],
         components: [windefaultButtons],
@@ -456,7 +456,7 @@ client.on("interactionCreate", async (interaction) => {
           SecondEmbed.setDescription(
             `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
               UserNumCount - 1
-            }개까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
+            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
           ),
         ],
         components: [deldelButtons],
@@ -469,7 +469,7 @@ client.on("interactionCreate", async (interaction) => {
           SecondEmbed.setDescription(
             `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
               UserNumCount - 1
-            }개까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
+            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
           ),
         ],
         components: [windefaultButtons],
