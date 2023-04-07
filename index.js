@@ -668,7 +668,6 @@ client.on("interactionCreate", async (interaction) => {
         .setDescription(`${text}`);
 
       init();
-
       return await interaction.update({ embeds: [Embed], components: [] });
     }
   }
