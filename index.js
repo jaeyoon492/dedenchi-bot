@@ -1,17 +1,26 @@
-const {
+import {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
-  MessageMentions,
-  MessageReaction,
-  ButtonBuilder,
-  ActionRowBuilder,
   ApplicationCommandType,
   ApplicationCommandOptionType,
-  ButtonStyle,
   Colors,
-} = require("discord.js");
-const { token } = require("./config.json");
+} from "discord.js";
+import { token } from "./config.js";
+import {
+  blockAddButtons,
+  blockJoinButtons,
+  blockStartButtons,
+  blockWinAddButtons,
+  defaultTeamSetupButtons,
+  defaultButtons,
+  firstButtons,
+  joinButtons,
+  minUserJoinedButtons,
+  winDefaultButtons,
+  winJoinButtons,
+} from "./src/components/buttons.js";
+import { shuffle } from "./src/utils/index.js";
 
 const client = new Client({
   intents: [
@@ -64,25 +73,12 @@ client.once("ready", async () => {
   console.log("팀짜기 봇이 실행되었습니다.");
 });
 
-// 당첨값 무작위 배열 알고리즘
-function shuffle(array) {
-  for (let index = array.length - 1; index > 0; index--) {
-    const randomPosition = Math.floor(Math.random() * (index + 1));
-    const temporary = array[index];
-
-    array[index] = array[randomPosition];
-    array[randomPosition] = temporary;
-  }
-}
-
 let player = new Map();
 let playerList = [];
+let playerCount = 0;
 
 let joinCount = 0;
 let winCount = 0;
-let UserNumCount = 0;
-let UserWinCount = 0;
-let PlayerNumCount = 0;
 
 let CommandOwner = "";
 
@@ -90,91 +86,49 @@ const MainEmbed = new EmbedBuilder()
   .setColor("DarkNavy")
   .setTitle("🙌 팀 나누기");
 
-const defaultButtons = new ActionRowBuilder()
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("del")
-      .setLabel("-")
-      .setStyle(ButtonStyle.Danger)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("add")
-      .setLabel("+")
-      .setStyle(ButtonStyle.Success)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("start")
-      .setLabel("팀원 수 설정")
-      .setStyle(ButtonStyle.Primary)
-  );
+const SecondEmbed = new EmbedBuilder()
+  .setColor("Blurple")
+  .setTitle("🤝 인원 정하기");
 
-const windefaultButtons = new ActionRowBuilder()
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("win_del")
-      .setLabel("-")
-      .setStyle(ButtonStyle.Danger)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("win_add")
-      .setLabel("+")
-      .setStyle(ButtonStyle.Success)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("join")
-      .setLabel("참석 투표 🤚")
-      .setStyle(ButtonStyle.Primary)
+const setDescriptionJoinCount = () => {
+  return MainEmbed.setDescription(
+    `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
   );
+};
 
-const blockJoinButtons = new ActionRowBuilder()
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("join_del")
-      .setLabel("불참")
-      .setStyle(ButtonStyle.Danger)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("join_add")
-      .setLabel("참석")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(true)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("ladder_start")
-      .setLabel("팀 나누기 ✨")
-      .setStyle(ButtonStyle.Primary)
+const setDescriptionTeamCount = () => {
+  return SecondEmbed.setDescription(
+    `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
+      joinCount - 1
+    }명 까지만 설정할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**참여자 수**: ${joinCount}\n**팀당 인원 수**: ${winCount}`
   );
+};
 
-const joinButtons = new ActionRowBuilder()
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("join_del")
-      .setLabel("불참")
-      .setStyle(ButtonStyle.Danger)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("join_add")
-      .setLabel("참석")
-      .setStyle(ButtonStyle.Success)
-  )
-  .addComponents(
-    new ButtonBuilder()
-      .setCustomId("ladder_start")
-      .setLabel("팀 나누기 ✨")
-      .setStyle(ButtonStyle.Primary)
+const setDescriptionJoinedPlayer = () => {
+  return MainEmbed.setDescription(
+    `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
+      joinCount
+    )}명 까지만 참가할 수 있습니다.\n
+    \n**현재 참여자 수**: ${playerList.length}
+    \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
+    \n**팀당 인원 수**: ${winCount}`
   );
+};
 
-// 314742079559434250
+const setPlayer = (userId, userName) => {
+  player.set(userId, userName);
+  playerCount++;
+  playerList.push(userName);
+};
+
+const deletePlayer = (userId, userName) => {
+  player.delete(userId);
+  playerCount--;
+  playerList = playerList.filter((item) => item !== userName);
+};
+
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
-
   if (interaction.commandName === "버그") {
     const reason =
       interaction.options.getString("문제요약") ?? "No reason provided";
@@ -193,7 +147,7 @@ client.on("interactionCreate", async (interaction) => {
 
     return await interaction.reply({
       embeds: [BugInfoEmbed],
-      content: `<@314742079559434250> 고쳐줘!`,
+      content: `고쳐줘요! <@314742079559434250>`,
     });
   }
 
@@ -217,35 +171,9 @@ client.on("interactionCreate", async (interaction) => {
     const UserId = interaction.user.id;
     CommandOwner = UserId;
 
-    const FirstButtons = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("del")
-          .setLabel("-")
-          .setStyle(ButtonStyle.Danger)
-          .setDisabled(true)
-      )
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("add")
-          .setLabel("+")
-          .setStyle(ButtonStyle.Success)
-      )
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("start")
-          .setLabel("팀원 수 설정")
-          .setDisabled(true)
-          .setStyle(ButtonStyle.Primary)
-      );
-
     await interaction.reply({
-      embeds: [
-        MainEmbed.setDescription(
-          `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: 0`
-        ),
-      ],
-      components: [FirstButtons],
+      embeds: [setDescriptionJoinCount()],
+      components: [firstButtons],
     });
   }
 });
@@ -256,104 +184,54 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isButton()) return;
 
-  UserNumCount = joinCount;
-  UserWinCount = winCount;
-
-  const SecondEmbed = new EmbedBuilder()
-    .setColor("Blurple")
-    .setTitle("🤝 팀나누기")
-    .setDescription(
-      `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
-        UserNumCount - 1
-      }명 까지만 설정할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${UserWinCount}`
-    );
-
   if (interaction.customId === "add") {
     if (UserId != CommandOwner) return;
-    if (UserNumCount == 11) {
-      const delAddButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("start")
-            .setLabel("시작")
-            .setStyle(ButtonStyle.Primary)
-        );
-
-      return await interaction.update({
-        embeds: [
-          MainEmbed.setDescription(
-            `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
-          ),
-        ],
-        components: [delAddButtons],
-      });
-    }
-    if (UserNumCount >= 0) {
+    if (joinCount < 1) {
       joinCount++;
       return await interaction.update({
-        embeds: [
-          MainEmbed.setDescription(
-            `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
-          ),
-        ],
+        embeds: [setDescriptionJoinCount()],
+        components: [blockStartButtons],
+      });
+    }
+    if (joinCount == 11) {
+      joinCount++;
+      return await interaction.update({
+        embeds: [setDescriptionJoinCount()],
+        components: [blockAddButtons],
+      });
+    }
+    if (joinCount >= 0) {
+      joinCount++;
+      return await interaction.update({
+        embeds: [setDescriptionJoinCount()],
         components: [defaultButtons],
       });
     }
   }
+
   if (interaction.customId === "del") {
     if (UserId != CommandOwner) return;
-    if (UserNumCount == 3) {
+
+    if (joinCount == 1) {
       joinCount--;
-      const delAddButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("start")
-            .setLabel("시작")
-            .setStyle(ButtonStyle.Primary)
-        );
       return await interaction.update({
-        embeds: [
-          MainEmbed.setDescription(
-            `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
-          ),
-        ],
-        components: [delAddButtons],
+        embeds: [setDescriptionJoinCount()],
+        components: [firstButtons],
       });
     }
-    if (UserNumCount <= 12) {
+
+    if (joinCount < 3) {
       joinCount--;
       return await interaction.update({
-        embeds: [
-          MainEmbed.setDescription(
-            `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
-          ),
-        ],
+        embeds: [setDescriptionJoinCount()],
+        components: [blockStartButtons],
+      });
+    }
+
+    if (joinCount <= 12) {
+      joinCount--;
+      return await interaction.update({
+        embeds: [setDescriptionJoinCount()],
         components: [defaultButtons],
       });
     }
@@ -361,285 +239,141 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "start") {
     if (UserId != CommandOwner) return;
-    if (UserNumCount <= 2) {
-      const nothingButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("ladder_start")
-            .setLabel("팀 나누기 ✨")
-            .setStyle(ButtonStyle.Primary)
-        );
+    if (joinCount >= 1 && joinCount <= 2) {
+      winCount++;
       return interaction.update({
-        embeds: [SecondEmbed],
-        components: [nothingButtons],
+        embeds: [setDescriptionTeamCount()],
+        components: [minUserJoinedButtons],
       });
     } else {
-      const winFristButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("join")
-            .setLabel("참석 투표 🤚")
-            .setStyle(ButtonStyle.Primary)
-        );
       interaction.update({
-        embeds: [SecondEmbed],
-        components: [winFristButtons],
+        embeds: [setDescriptionTeamCount()],
+        components: [defaultTeamSetupButtons],
       });
     }
   }
 
   if (interaction.customId === "win_add") {
     if (UserId != CommandOwner) return;
-    if (UserWinCount == UserNumCount - 1) {
-      const delAddButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("join")
-            .setLabel("참석 투표 🤚")
-            .setStyle(ButtonStyle.Primary)
-        );
-
-      return await interaction.update({
-        embeds: [
-          SecondEmbed.setDescription(
-            `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
-              UserNumCount - 1
-            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
-          ),
-        ],
-        components: [delAddButtons],
-      });
-    }
-    if (UserWinCount >= 0) {
+    if (winCount == joinCount - 2) {
       winCount++;
-      // winCount.set(UserId, UserWinCount + 1);
       return await interaction.update({
-        embeds: [
-          SecondEmbed.setDescription(
-            `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
-              UserNumCount - 1
-            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
-          ),
-        ],
-        components: [windefaultButtons],
+        embeds: [setDescriptionTeamCount()],
+        components: [blockWinAddButtons],
       });
     }
+
+    winCount++;
+    return await interaction.update({
+      embeds: [setDescriptionTeamCount()],
+      components: [winDefaultButtons],
+    });
   }
 
   if (interaction.customId === "win_del") {
     if (UserId != CommandOwner) return;
-    if (UserWinCount == 2) {
-      // winCount--;
-      const deldelButtons = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_del")
-            .setLabel("-")
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("win_add")
-            .setLabel("+")
-            .setStyle(ButtonStyle.Success)
-        )
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId("join")
-            .setLabel("참석 투표 🤚")
-            .setStyle(ButtonStyle.Primary)
-        );
-      return await interaction.update({
-        embeds: [
-          SecondEmbed.setDescription(
-            `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
-              UserNumCount - 1
-            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
-          ),
-        ],
-        components: [deldelButtons],
-      });
-    }
-    if (UserWinCount <= UserNumCount) {
+    if (winCount == 1) {
       winCount--;
       return await interaction.update({
-        embeds: [
-          SecondEmbed.setDescription(
-            `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
-              UserNumCount - 1
-            }명 까지만 설정할 수 있습니다.\n\n**참여자 수**: ${UserNumCount}\n**팀당 인원 수**: ${winCount}`
-          ),
-        ],
-        components: [windefaultButtons],
+        embeds: [setDescriptionTeamCount()],
+        components: [defaultTeamSetupButtons],
       });
     }
+
+    winCount--;
+    return await interaction.update({
+      embeds: [setDescriptionTeamCount()],
+      components: [winDefaultButtons],
+    });
   }
 
   if (interaction.customId === "join") {
-    const winJoinButtons = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("join_del")
-          .setLabel("불참")
-          .setStyle(ButtonStyle.Danger)
-          .setDisabled(true)
-      )
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("join_add")
-          .setLabel("참석")
-          .setStyle(ButtonStyle.Success)
-      )
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("ladder_start")
-          .setLabel("팀 나누기 ✨")
-          .setStyle(ButtonStyle.Primary)
-      );
     interaction.update({
-      embeds: [SecondEmbed],
+      embeds: [setDescriptionTeamCount()],
       components: [winJoinButtons],
     });
   }
 
   // pin
   if (interaction.customId === "join_add") {
-    console.log("UserNumCount", UserNumCount);
-    console.log("PlayerNumCount", PlayerNumCount);
-    if (PlayerNumCount >= 0 && UserNumCount >= PlayerNumCount) {
-      if (!player.get(UserId)) {
-        player.set(UserId, userName);
-        PlayerNumCount++;
-        playerList.push(userName);
-      } else {
-        return await interaction.update({
-          embeds: [
-            MainEmbed.setDescription(
-              `중복 참여가 불가 합니다.\n ${userName}님은 이미 참석 하셨습니다.\n\n**현재 참여자**: ${playerList.map(
-                (item) => item,
-                ", "
-              )}`
-            ),
-          ],
-          components: [joinButtons],
-        });
-      }
-    }
+    console.log("playerCount", playerCount);
 
-    if (PlayerNumCount == 11) {
+    if (player.get(UserId)) {
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
-            `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**참여자 수**: ${joinCount}`
+            `중복 참여가 불가 합니다.\n ${userName}님은 이미 참석 하셨습니다.\n\n**현재 참여자**: ${playerList.map(
+              (item) => item,
+              ", "
+            )}`
           ),
         ],
+        components: [joinButtons],
+      });
+    }
+
+    if (playerCount == 11) {
+      setPlayer(UserId, userName);
+      return await interaction.update({
+        embeds: [setDescriptionJoinedPlayer()],
         components: [blockJoinButtons],
       });
     }
 
-    // pin
-    return await interaction.update({
-      embeds: [
-        MainEmbed.setDescription(
-          `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
-            UserNumCount
-          )}명 까지만 참가할 수 있습니다.\n
-          \n**현재 참여자 수**: ${playerList.length}
-          \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
-          \n**팀당 인원 수**: ${UserWinCount}`
-        ),
-      ],
-      components: [joinButtons],
-    });
+    if (playerCount >= 0 && joinCount >= playerCount) {
+      setPlayer(UserId, userName);
+      return await interaction.update({
+        embeds: [setDescriptionJoinedPlayer()],
+        components: [joinButtons],
+      });
+    }
   }
 
   if (interaction.customId === "join_del") {
-    if (PlayerNumCount >= 0 && UserNumCount >= PlayerNumCount) {
-      if (player.get(UserId)) {
-        player.delete(UserId);
-        PlayerNumCount--;
-        playerList = playerList.filter((item) => item !== userName);
-      } else {
-        return await interaction.update({
-          embeds: [
-            MainEmbed.setDescription(
-              `${userName}님은 참석자가 아닙니다. \n**현재 참여자 수**: ${
-                playerList.length
-              } \n**현재 참여자**: ${playerList.map((item) => item, ", ")}`
-            ),
-          ],
-          components: [joinButtons],
-        });
-      }
+    if (!player.get(UserId)) {
+      return await interaction.update({
+        embeds: [
+          MainEmbed.setDescription(
+            `${userName}님은 참석자가 아닙니다. \n**현재 참여자 수**: ${
+              playerList.length
+            } \n**현재 참여자**: ${playerList.map((item) => item, ", ")}`
+          ),
+        ],
+        components: [joinButtons],
+      });
     }
 
-    return await interaction.update({
-      embeds: [
-        MainEmbed.setDescription(
-          `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
-            UserNumCount
-          )}명 까지만 참가할 수 있습니다.\n
-          \n**현재 참여자 수**: ${playerList.length}
-          \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
-          \n**팀당 인원 수**: ${UserWinCount}`
-        ),
-      ],
-      components: [joinButtons],
-    });
+    if (playerCount >= 0 && joinCount >= playerCount) {
+      deletePlayer(UserId, userName);
+
+      return await interaction.update({
+        embeds: [
+          MainEmbed.setDescription(
+            `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
+              joinCount
+            )}명 까지만 참가할 수 있습니다.\n
+            \n**현재 참여자 수**: ${playerList.length}
+            \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
+            \n**팀당 인원 수**: ${winCount}`
+          ),
+        ],
+        components: [joinButtons],
+      });
+    }
   }
 
   if (interaction.customId === "ladder_start") {
     if (UserId != CommandOwner) return;
-    if (UserNumCount !== playerList.length) {
+    if (joinCount !== playerList.length) {
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
             `참여자 수가 부족합니다.\n${Math.floor(
-              UserNumCount - playerList.length
+              joinCount - playerList.length
             )}명이 참석 여부를 결정해야 합니다.\n
             \n**현재 참여자 수**: ${playerList.length}
             \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
-            \n**팀당 인원 수**: ${UserWinCount}`
+            \n**팀당 인원 수**: ${winCount}`
           ),
         ],
         components: [joinButtons],
@@ -647,8 +381,8 @@ client.on("interactionCreate", async (interaction) => {
     } else {
       const arr = new Array();
 
-      for (let count = 0; count < UserNumCount; ++count) {
-        if (count < UserWinCount) {
+      for (let count = 0; count < joinCount; ++count) {
+        if (count < winCount) {
           arr.push("1팀");
         } else {
           arr.push("2팀");
@@ -678,8 +412,7 @@ const init = () => {
   playerList = [];
   winCount = 0;
   joinCount = 0;
-  PlayerNumCount = 0;
-  UserNumCount = 0;
+  playerCount = 0;
 };
 
 // 봇과 서버를 연결해주는 부분
