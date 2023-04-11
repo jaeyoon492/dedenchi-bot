@@ -40,15 +40,6 @@ const owners = new Map();
 const interactions = new Map();
 const game = new Map();
 
-let player = new Map();
-let playerList = [];
-let playerCount = 0;
-
-let joinCount = 0;
-let winCount = 0;
-
-let CommandOwner = "";
-
 client.once("ready", async () => {
   client.application.commands
     .set([
