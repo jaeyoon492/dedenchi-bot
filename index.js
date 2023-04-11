@@ -5,6 +5,7 @@ import {
   ApplicationCommandType,
   ApplicationCommandOptionType,
   Colors,
+  User,
 } from "discord.js";
 import { token } from "./config.js";
 import {
@@ -34,6 +35,19 @@ const client = new Client({
     GatewayIntentBits.DirectMessageTyping,
   ],
 });
+
+const owners = new Map();
+const interactions = new Map();
+const game = new Map();
+
+let player = new Map();
+let playerList = [];
+let playerCount = 0;
+
+let joinCount = 0;
+let winCount = 0;
+
+let CommandOwner = "";
 
 client.once("ready", async () => {
   client.application.commands
@@ -73,15 +87,6 @@ client.once("ready", async () => {
   console.log("팀짜기 봇이 실행되었습니다.");
 });
 
-let player = new Map();
-let playerList = [];
-let playerCount = 0;
-
-let joinCount = 0;
-let winCount = 0;
-
-let CommandOwner = "";
-
 const MainEmbed = new EmbedBuilder()
   .setColor("DarkNavy")
   .setTitle("🙌 팀 나누기");
@@ -90,13 +95,13 @@ const SecondEmbed = new EmbedBuilder()
   .setColor("Blurple")
   .setTitle("🤝 인원 정하기");
 
-const setDescriptionJoinCount = () => {
+const setDescriptionJoinCount = (joinCount) => {
   return MainEmbed.setDescription(
     `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
   );
 };
 
-const setDescriptionTeamCount = () => {
+const setDescriptionTeamCount = (joinCount, winCount) => {
   return SecondEmbed.setDescription(
     `한 팀에 들어갈 인원수를 정해주세요.\n최대 ${
       joinCount - 1
@@ -104,7 +109,7 @@ const setDescriptionTeamCount = () => {
   );
 };
 
-const setDescriptionJoinedPlayer = () => {
+const setDescriptionJoinedPlayer = (playerList, winCount) => {
   return MainEmbed.setDescription(
     `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
       joinCount
@@ -115,20 +120,33 @@ const setDescriptionJoinedPlayer = () => {
   );
 };
 
-const setPlayer = (userId, userName) => {
-  player.set(userId, userName);
-  playerCount++;
-  playerList.push(userName);
+const setPlayer = (interactionId, playerId, userName) => {
+  const selectedGame = game.get(interactionId);
+
+  if (!selectedGame.player.get(playerId)) {
+    selectedGame.player.set(playerId, userName);
+    selectedGame.playerCount++;
+    selectedGame.playerList.push(userName);
+    return true;
+  } else {
+    return false;
+  }
 };
 
-const deletePlayer = (userId, userName) => {
-  player.delete(userId);
-  playerCount--;
-  playerList = playerList.filter((item) => item !== userName);
+const deletePlayer = (interactionId, playerId, userName) => {
+  const selectedGame = game.get(interactionId);
+
+  selectedGame.player.delete(playerId);
+  selectedGame.playerCount--;
+  selectedGame.playerList = selectedGame.playerList.filter(
+    (item) => item !== userName
+  );
 };
 
 client.on("interactionCreate", async (interaction) => {
+  console.log(interaction);
   if (!interaction.isCommand()) return;
+  const userId = interaction.user.id;
   if (interaction.commandName === "버그") {
     const reason =
       interaction.options.getString("문제요약") ?? "No reason provided";
@@ -137,17 +155,15 @@ client.on("interactionCreate", async (interaction) => {
       .setColor(Colors.DarkRed)
       .setTitle("내가 어디가 아프죠?")
       .addFields([{ name: "증상", value: reason }])
-      .addFields([
-        { name: "멋진 담당자 👩‍💻", value: `<@314742079559434250>` },
-        { name: "그냥 지나가는 행인", value: "행복맨" },
-      ])
+      .addFields([{ name: "만든 사람 🧑‍💻", value: "<@282477766920765440>" }])
+      .addFields([{ name: "고치는 사람 😇", value: "<@314742079559434250>" }])
       .setFooter({
         text: `👾멋진 피드백 제공자👾: ${interaction.user.username} | ${interaction.user.id}`,
       });
 
     return await interaction.reply({
       embeds: [BugInfoEmbed],
-      content: `고쳐줘요! <@314742079559434250>`,
+      content: `고쳐줘요! <@282477766920765440> <@314742079559434250>`,
     });
   }
 
@@ -156,8 +172,8 @@ client.on("interactionCreate", async (interaction) => {
       .setColor("2F3136")
       .setTitle("봇 정보")
       .addFields([
-        { name: "개발자", value: "재바리" },
-        { name: "버전", value: "0.0.1" },
+        { name: "개발자", value: "<@282477766920765440>" },
+        { name: "버전", value: "0.0.2" },
       ])
       .setFooter({
         text: `정보 요청자: ${interaction.user.username} | ${interaction.user.id}`,
@@ -167,142 +183,203 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.commandName === "데덴찌") {
-    init();
-    const UserId = interaction.user.id;
-    CommandOwner = UserId;
+    const initGame = {
+      player: new Map(),
+      playerList: [],
+      playerCount: 0,
+      joinCount: 0,
+      winCount: 0,
+    };
 
-    await interaction.reply({
-      embeds: [setDescriptionJoinCount()],
+    game.set(interaction.id, initGame);
+    owners.set(userId, interaction.id);
+    interactions.set(interaction.id, userId);
+
+    return await interaction.reply({
+      embeds: [setDescriptionJoinCount(game.get(interaction.id).joinCount)],
       components: [firstButtons],
     });
   }
 });
 
 client.on("interactionCreate", async (interaction) => {
-  const UserId = interaction.user.id;
-  const userName = interaction.user.username;
-
   if (!interaction.isButton()) return;
 
+  const userId = interaction.user.id;
+  const userName = interaction.user.username;
+  const receivedInteractionId = interaction.message.interaction.id;
+
   if (interaction.customId === "add") {
-    if (UserId != CommandOwner) return;
-    if (joinCount < 1) {
-      joinCount++;
+    if (owners.get(userId) !== receivedInteractionId) return;
+    if (game.get(receivedInteractionId).joinCount < 1) {
+      game.get(receivedInteractionId).joinCount++;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [blockStartButtons],
       });
     }
-    if (joinCount == 11) {
-      joinCount++;
+    if (game.get(receivedInteractionId).joinCount == 11) {
+      game.get(receivedInteractionId).joinCount++;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [blockAddButtons],
       });
     }
-    if (joinCount >= 0) {
-      joinCount++;
+    if (game.get(receivedInteractionId).joinCount >= 0) {
+      game.get(receivedInteractionId).joinCount++;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [defaultButtons],
       });
     }
   }
 
   if (interaction.customId === "del") {
-    if (UserId != CommandOwner) return;
+    if (owners.get(userId) !== receivedInteractionId) return;
 
-    if (joinCount == 1) {
-      joinCount--;
+    if (game.get(receivedInteractionId).joinCount == 1) {
+      game.get(receivedInteractionId).joinCount--;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [firstButtons],
       });
     }
 
-    if (joinCount < 3) {
-      joinCount--;
+    if (game.get(receivedInteractionId).joinCount < 3) {
+      game.get(receivedInteractionId).joinCount--;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [blockStartButtons],
       });
     }
 
-    if (joinCount <= 12) {
-      joinCount--;
+    if (game.get(receivedInteractionId).joinCount <= 12) {
+      game.get(receivedInteractionId).joinCount--;
       return await interaction.update({
-        embeds: [setDescriptionJoinCount()],
+        embeds: [
+          setDescriptionJoinCount(game.get(receivedInteractionId).joinCount),
+        ],
         components: [defaultButtons],
       });
     }
   }
 
   if (interaction.customId === "start") {
-    if (UserId != CommandOwner) return;
-    if (joinCount >= 1 && joinCount <= 2) {
-      winCount++;
+    if (owners.get(userId) !== receivedInteractionId) return;
+    if (
+      game.get(receivedInteractionId).joinCount >= 1 &&
+      game.get(receivedInteractionId).joinCount <= 2
+    ) {
+      game.get(receivedInteractionId).winCount++;
       return interaction.update({
-        embeds: [setDescriptionTeamCount()],
+        embeds: [
+          setDescriptionTeamCount(
+            game.get(receivedInteractionId).joinCount,
+            game.get(receivedInteractionId).winCount
+          ),
+        ],
         components: [minUserJoinedButtons],
       });
     } else {
       interaction.update({
-        embeds: [setDescriptionTeamCount()],
+        embeds: [
+          setDescriptionTeamCount(
+            game.get(receivedInteractionId).joinCount,
+            game.get(receivedInteractionId).winCount
+          ),
+        ],
         components: [defaultTeamSetupButtons],
       });
     }
   }
 
   if (interaction.customId === "win_add") {
-    if (UserId != CommandOwner) return;
-    if (winCount == joinCount - 2) {
-      winCount++;
+    if (owners.get(userId) !== receivedInteractionId) return;
+    if (
+      game.get(receivedInteractionId).winCount ==
+      game.get(receivedInteractionId).joinCount - 2
+    ) {
+      game.get(receivedInteractionId).winCount++;
       return await interaction.update({
-        embeds: [setDescriptionTeamCount()],
+        embeds: [
+          setDescriptionTeamCount(
+            game.get(receivedInteractionId).joinCount,
+            game.get(receivedInteractionId).winCount
+          ),
+        ],
         components: [blockWinAddButtons],
       });
     }
 
-    winCount++;
+    game.get(receivedInteractionId).winCount++;
     return await interaction.update({
-      embeds: [setDescriptionTeamCount()],
+      embeds: [
+        setDescriptionTeamCount(
+          game.get(receivedInteractionId).joinCount,
+          game.get(receivedInteractionId).winCount
+        ),
+      ],
       components: [winDefaultButtons],
     });
   }
 
   if (interaction.customId === "win_del") {
-    if (UserId != CommandOwner) return;
-    if (winCount == 1) {
-      winCount--;
+    if (owners.get(userId) !== receivedInteractionId) return;
+    if (game.get(receivedInteractionId).winCount == 1) {
+      game.get(receivedInteractionId).winCount--;
       return await interaction.update({
-        embeds: [setDescriptionTeamCount()],
+        embeds: [
+          setDescriptionTeamCount(
+            game.get(receivedInteractionId).joinCount,
+            game.get(receivedInteractionId).winCount
+          ),
+        ],
         components: [defaultTeamSetupButtons],
       });
     }
 
-    winCount--;
+    game.get(receivedInteractionId).winCount--;
     return await interaction.update({
-      embeds: [setDescriptionTeamCount()],
+      embeds: [
+        setDescriptionTeamCount(
+          game.get(receivedInteractionId).joinCount,
+          game.get(receivedInteractionId).winCount
+        ),
+      ],
       components: [winDefaultButtons],
     });
   }
 
   if (interaction.customId === "join") {
     interaction.update({
-      embeds: [setDescriptionTeamCount()],
+      embeds: [
+        setDescriptionTeamCount(
+          game.get(receivedInteractionId).joinCount,
+          game.get(receivedInteractionId).winCount
+        ),
+      ],
       components: [winJoinButtons],
     });
   }
 
   // pin
   if (interaction.customId === "join_add") {
-    console.log("playerCount", playerCount);
-
-    if (player.get(UserId)) {
+    const selectedGame = game.get(receivedInteractionId);
+    if (selectedGame.player.get(userId)) {
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
-            `중복 참여가 불가 합니다.\n ${userName}님은 이미 참석 하셨습니다.\n\n**현재 참여자**: ${playerList.map(
+            `중복 참여가 불가 합니다.\n ${userName}님은 이미 참석 하셨습니다.\n\n**현재 참여자**: ${selectedGame.playerList.map(
               (item) => item,
               ", "
             )}`
@@ -312,49 +389,71 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    if (playerCount == 11) {
-      setPlayer(UserId, userName);
+    if (selectedGame.playerCount == 11) {
+      setPlayer(receivedInteractionId, userId, userName);
       return await interaction.update({
-        embeds: [setDescriptionJoinedPlayer()],
+        embeds: [
+          setDescriptionJoinedPlayer(
+            selectedGame.playerList,
+            selectedGame.winCount
+          ),
+        ],
         components: [blockJoinButtons],
       });
     }
 
-    if (playerCount >= 0 && joinCount >= playerCount) {
-      setPlayer(UserId, userName);
+    if (
+      selectedGame.playerCount >= 0 &&
+      selectedGame.joinCount >= selectedGame.playerCount
+    ) {
+      setPlayer(receivedInteractionId, userId, userName);
       return await interaction.update({
-        embeds: [setDescriptionJoinedPlayer()],
+        embeds: [
+          setDescriptionJoinedPlayer(
+            selectedGame.playerList,
+            selectedGame.winCount
+          ),
+        ],
         components: [joinButtons],
       });
     }
   }
 
   if (interaction.customId === "join_del") {
-    if (!player.get(UserId)) {
+    if (!selectedGame.player.get(userId)) {
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
             `${userName}님은 참석자가 아닙니다. \n**현재 참여자 수**: ${
-              playerList.length
-            } \n**현재 참여자**: ${playerList.map((item) => item, ", ")}`
+              selectedGame.playerList.length
+            } \n**현재 참여자**: ${selectedGame.playerList.map(
+              (item) => item,
+              ", "
+            )}`
           ),
         ],
         components: [joinButtons],
       });
     }
 
-    if (playerCount >= 0 && joinCount >= playerCount) {
-      deletePlayer(UserId, userName);
+    if (
+      selectedGame.playerCount >= 0 &&
+      selectedGame.joinCount >= selectedGame.playerCount
+    ) {
+      deletePlayer(userId, userName);
 
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
             `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
-              joinCount
+              selectedGame.joinCount
             )}명 까지만 참가할 수 있습니다.\n
-            \n**현재 참여자 수**: ${playerList.length}
-            \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
-            \n**팀당 인원 수**: ${winCount}`
+            \n**현재 참여자 수**: ${selectedGame.playerList.length}
+            \n**현재 참여자**: ${selectedGame.playerList.map(
+              (item) => item,
+              ", "
+            )}
+            \n**팀당 인원 수**: ${selectedGame.winCount}`
           ),
         ],
         components: [joinButtons],
@@ -363,17 +462,22 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.customId === "ladder_start") {
-    if (UserId != CommandOwner) return;
-    if (joinCount !== playerList.length) {
+    if (owners.get(userId) !== receivedInteractionId) return;
+    const selectedGame = game.get(receivedInteractionId);
+
+    if (selectedGame.joinCount !== selectedGame.playerList.length) {
       return await interaction.update({
         embeds: [
           MainEmbed.setDescription(
             `참여자 수가 부족합니다.\n${Math.floor(
-              joinCount - playerList.length
+              selectedGame.joinCount - selectedGame.playerList.length
             )}명이 참석 여부를 결정해야 합니다.\n
-            \n**현재 참여자 수**: ${playerList.length}
-            \n**현재 참여자**: ${playerList.map((item) => item, ", ")}
-            \n**팀당 인원 수**: ${winCount}`
+            \n**현재 참여자 수**: ${selectedGame.playerList.length}
+            \n**현재 참여자**: ${selectedGame.playerList.map(
+              (item) => item,
+              ", "
+            )}
+            \n**팀당 인원 수**: ${selectedGame.winCount}`
           ),
         ],
         components: [joinButtons],
@@ -381,8 +485,8 @@ client.on("interactionCreate", async (interaction) => {
     } else {
       const arr = new Array();
 
-      for (let count = 0; count < joinCount; ++count) {
-        if (count < winCount) {
+      for (let count = 0; count < selectedGame.joinCount; ++count) {
+        if (count < selectedGame.winCount) {
           arr.push("1팀");
         } else {
           arr.push("2팀");
@@ -392,8 +496,8 @@ client.on("interactionCreate", async (interaction) => {
       shuffle(arr);
 
       let text = "";
-      for (let count = 0; count < playerList.length; ++count) {
-        text += `${playerList[count]} - ${arr.shift()}\n`;
+      for (let count = 0; count < selectedGame.playerList.length; ++count) {
+        text += `${selectedGame.playerList[count]} - ${arr.shift()}\n`;
       }
 
       const Embed = new EmbedBuilder()
@@ -401,19 +505,10 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("팀나누기 결과")
         .setDescription(`${text}`);
 
-      init();
       return await interaction.update({ embeds: [Embed], components: [] });
     }
   }
 });
-
-const init = () => {
-  player.clear();
-  playerList = [];
-  winCount = 0;
-  joinCount = 0;
-  playerCount = 0;
-};
 
 // 봇과 서버를 연결해주는 부분
 client.login(token);
