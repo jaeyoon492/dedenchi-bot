@@ -109,7 +109,7 @@ const setDescriptionTeamCount = (joinCount, winCount) => {
   );
 };
 
-const setDescriptionJoinedPlayer = (playerList, winCount) => {
+const setDescriptionJoinedPlayer = (playerList, winCount, joinCount) => {
   return MainEmbed.setDescription(
     `참석 여부를 결정 해주세요.\n최대 ${Math.floor(
       joinCount
@@ -395,7 +395,8 @@ client.on("interactionCreate", async (interaction) => {
         embeds: [
           setDescriptionJoinedPlayer(
             selectedGame.playerList,
-            selectedGame.winCount
+            selectedGame.winCount,
+            selectedGame.joinCount
           ),
         ],
         components: [blockJoinButtons],
@@ -411,7 +412,8 @@ client.on("interactionCreate", async (interaction) => {
         embeds: [
           setDescriptionJoinedPlayer(
             selectedGame.playerList,
-            selectedGame.winCount
+            selectedGame.winCount,
+            selectedGame.joinCount
           ),
         ],
         components: [joinButtons],
