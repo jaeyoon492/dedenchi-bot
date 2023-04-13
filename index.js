@@ -86,6 +86,18 @@ const SecondEmbed = new EmbedBuilder()
   .setColor("Blurple")
   .setTitle("🤝 인원 정하기");
 
+const sessionClear = (interaction) => {
+  const clear = setTimeout(
+    () =>
+      interaction.deleteReply({
+        content: `시간 초과로 게임이 종료되었습니다.`,
+      }),
+    1000 * 60 * 10
+  );
+
+  return clear;
+};
+
 const setDescriptionJoinCount = (joinCount) => {
   return MainEmbed.setDescription(
     `참여인원 수를 정해주세요.\n최대 12명까지 참여할 수 있습니다.\n\n게임 생성자만 설정이 가능합니다.\n\n**총 참여자 수**: ${joinCount}`
@@ -134,11 +146,14 @@ const deletePlayer = (interactionId, playerId, userName) => {
   );
 };
 
+let commandSession;
+
 client.on("interactionCreate", async (interaction) => {
-  console.log(interaction);
   if (!interaction.isCommand()) return;
   const userId = interaction.user.id;
+  commandSession = sessionClear(interaction);
   if (interaction.commandName === "버그") {
+    clearTimeout(commandSession);
     const reason =
       interaction.options.getString("문제요약") ?? "No reason provided";
 
@@ -159,6 +174,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.commandName === "정보") {
+    clearTimeout(commandSession);
     const BotInfoEmbed = new EmbedBuilder()
       .setColor("2F3136")
       .setTitle("봇 정보")
@@ -195,10 +211,12 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
+  const gameSession = sessionClear(interaction);
+  clearTimeout(commandSession);
 
-  const userId = interaction.user.id;
-  const userName = interaction.user.username;
   const receivedInteractionId = interaction.message.interaction.id;
+  const userName = interaction.user.username;
+  const userId = interaction.user.id;
 
   if (interaction.customId === "add") {
     if (owners.get(userId) !== receivedInteractionId) return;
@@ -267,6 +285,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "start") {
     if (owners.get(userId) !== receivedInteractionId) return;
+
     if (
       game.get(receivedInteractionId).joinCount >= 1 &&
       game.get(receivedInteractionId).joinCount <= 2
@@ -296,6 +315,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "win_add") {
     if (owners.get(userId) !== receivedInteractionId) return;
+
     if (
       game.get(receivedInteractionId).winCount ==
       game.get(receivedInteractionId).joinCount - 2
@@ -326,6 +346,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "win_del") {
     if (owners.get(userId) !== receivedInteractionId) return;
+
     if (game.get(receivedInteractionId).winCount == 1) {
       game.get(receivedInteractionId).winCount--;
       return await interaction.update({
@@ -456,6 +477,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "ladder_start") {
     if (owners.get(userId) !== receivedInteractionId) return;
+
     const selectedGame = game.get(receivedInteractionId);
 
     if (selectedGame.joinCount !== selectedGame.playerList.length) {
@@ -498,6 +520,7 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("팀나누기 결과")
         .setDescription(`${text}`);
 
+      clearTimeout(gameSession);
       return await interaction.update({ embeds: [Embed], components: [] });
     }
   }
